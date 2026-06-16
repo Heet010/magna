@@ -1,7 +1,7 @@
-"""Structured-output schema the agent must return (validated via Pydantic).
+"""Structured-output schema the agent must return (enforced via the OpenAI API).
 
-These models are passed to `client.messages.parse(..., output_format=...)` so the
-Claude API constrains its response to exactly this shape — no brittle text parsing.
+The Field descriptions below are sent to the model as the JSON schema, so they are
+instructions, not just documentation.
 """
 from __future__ import annotations
 
@@ -42,6 +42,11 @@ class Metric(BaseModel):
 class PeriodMetrics(BaseModel):
     period: Literal["FY2025", "Q1-2026"]
     currency: str = Field(description="Reporting currency, e.g. 'EUR'.")
+    shares_outstanding: str = Field(
+        description="Total number of shares outstanding/issued as a plain integer "
+        "(e.g. '561135000'), used to compute market cap. Include all share classes "
+        "where there are several (ordinary + preferred). Use '' if not in the text."
+    )
     metrics: List[Metric] = Field(description="One entry per requested metric (10 total).")
 
 

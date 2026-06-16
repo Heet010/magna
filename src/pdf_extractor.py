@@ -1,20 +1,14 @@
-"""Extract and filter the financially-relevant text from large report PDFs.
+"""Extract and filter the financially-relevant text from the report PDFs.
 
-The full-year reports run 400-670 pages, far more than is useful (or affordable)
-to send to the model. We score every page by how many financial keywords it
-contains (English and German), then keep the highest-scoring pages up to a
-character budget. The "at a glance" / key-figures pages near the front are
-always kept because they hold the headline KPIs.
+Each page is scored by financial keywords (English and German); the highest-scoring
+pages are kept up to a character budget, preserving table context.
 """
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 
 import fitz  # PyMuPDF
 
-# Keywords that signal a page carries the metrics we care about. Bilingual:
-# Mercedes-Benz and BMW publish in English; Volkswagen's annual report is German.
 KEYWORDS: dict[str, float] = {
     # income statement / revenue / EBIT
     "revenue": 3, "umsatzerlöse": 3, "umsatz": 1, "net sales": 2,
@@ -33,18 +27,24 @@ KEYWORDS: dict[str, float] = {
     "return on net assets": 3,
     # cost of capital / hurdle
     "cost of capital": 3, "kapitalkosten": 3, "wacc": 3, "hurdle": 2,
-    # per-share metrics
-    "earnings per share": 3, "ergebnis je aktie": 3, "per share": 1,
-    "dividend per share": 3, "dividende je aktie": 3, "dividend": 1,
-    "dividende": 1, "market capitalisation": 2, "marktkapitalisierung": 2,
-    "no. of shares": 1, "shares outstanding": 1, "anzahl aktien": 1,
+    # per-share / investor metrics (boosted — these pages hold EPS, the dividend
+    # proposal and the share count, and are easily crowded out)
+    "earnings per share": 4, "ergebnis je aktie": 4, "per share": 2,
+    "dividend per share": 4, "dividende je aktie": 4, "dividend proposal": 4,
+    "dividende je vorzugsaktie": 4, "dividende je stammaktie": 4,
+    "dividendenvorschlag": 4, "vorzugsaktie": 2, "stammaktie": 2,
+    "dividend": 1, "dividende": 1,
+    "market capitalisation": 3, "market capitalization": 3, "marktkapitalisierung": 3,
+    "number of shares": 4, "no. of shares": 3, "shares outstanding": 4,
+    "shares issued": 3, "issued capital": 3, "no-par value shares": 4,
+    "stückaktien": 4, "grundkapital": 3, "anzahl der aktien": 4, "anzahl aktien": 3,
+    "information on shares": 3, "the bmw share": 3, "investor relations": 1,
     # navigational anchors for the highlight tables
     "key figures": 2, "kennzahlen": 2, "at a glance": 2, "auf einen blick": 2,
     "key performance indicators": 2, "balance sheet": 1, "bilanz": 1,
 }
 
-# Always keep these front pages — they usually hold the highlights/KPI summary.
-ALWAYS_KEEP_FIRST = 12
+ALWAYS_KEEP_FIRST = 12  # front pages usually hold the KPI highlights
 
 
 @dataclass
@@ -52,17 +52,27 @@ class FilteredReport:
     company: str
     period: str
     total_pages: int
-    kept_pages: list[int]      # 0-based page indices, in document order
-    text: str                  # concatenated text of kept pages
+    kept_pages: list[int]
+    text: str
     char_count: int
-
-
-_word_re = re.compile(r"[^\W\d_]+", re.UNICODE)
 
 
 def _score_page(text: str) -> float:
     low = text.lower()
-    return sum(weight * low.count(kw) for kw, weight in KEYWORDS.items())
+    score = sum(weight * low.count(kw) for kw, weight in KEYWORDS.items())
+
+    # Bonus for the dedicated investor/share page (dividend + EPS + share count).
+    has_share = any(t in low for t in (
+        "number of shares", "shares outstanding", "shares issued", "no-par value",
+        "stückaktien", "anzahl der aktien", "grundkapital", "share capital"))
+    has_payout = any(t in low for t in (
+        "dividend per share", "dividend proposal", "dividende je",
+        "dividendenvorschlag", "earnings per share", "ergebnis je aktie"))
+    if has_share and has_payout:
+        score += 12
+    elif has_share:
+        score += 6
+    return score
 
 
 def filter_report(path, company: str, period: str, char_budget: int) -> FilteredReport:
@@ -76,10 +86,9 @@ def filter_report(path, company: str, period: str, char_budget: int) -> Filtered
     for i, text in pages:
         score = _score_page(text)
         if i < ALWAYS_KEEP_FIRST:
-            score += 5  # bias toward the front-matter highlight pages
+            score += 5
         scored.append((i, score, text))
 
-    # Greedily take the best-scoring non-trivial pages until the budget is hit.
     ranked = sorted(scored, key=lambda t: t[1], reverse=True)
     kept: dict[int, str] = {}
     used = 0

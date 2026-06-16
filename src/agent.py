@@ -1,10 +1,6 @@
-"""The extraction agent: turns filtered report text into structured KPIs via the
-OpenAI API.
+"""The extraction agent: filtered report text -> structured KPIs via the OpenAI API.
 
-One call per company covers both report periods, so the model can align the
-quarterly figures with the same KPI vocabulary it found in the full-year report.
-Results are cached to disk so re-runs (e.g. while tuning the report layout) don't
-re-spend API calls.
+One call per company covers both report periods; results are cached to disk.
 """
 from __future__ import annotations
 
@@ -37,8 +33,7 @@ def extract_company(
 
     task = build_task_prompt(company, fy_text, q_text)
 
-    # Structured outputs: response_format=<Pydantic model> makes the API return JSON
-    # that conforms exactly to CompanyExtraction (strict schema) — no text parsing.
+    # Structured output: the response is constrained to the CompanyExtraction schema.
     completion = client.beta.chat.completions.parse(
         model=config.AGENT_MODEL,
         max_tokens=8000,

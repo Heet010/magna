@@ -37,7 +37,13 @@ It returns a **structured output** (JSON schema enforced by the API — see
 `src/schema.py`): for each company, a `full_year` and a `last_quarter` block, each
 with all 10 metrics carrying `value`, `source_term` (the verbatim KPI name used by
 the company), `source_page` (the PDF page the figure was read from, for spot-checking),
-`status` (`reported` / `substituted` / `not_reported` / `not_available`), and a `note`.
+`status` (`reported` / `substituted` / `not_reported` / `not_available`), and a `note`,
+plus a `shares_outstanding` count per period.
+
+Two derived cells — **operating margin** (EBIT ÷ revenue) and **market cap @ €100/share**
+(€100 × shares outstanding) — are recomputed deterministically in Python from the
+extracted inputs (`src/compute.py`), so the table never depends on the model's
+arithmetic.
 
 ## 2. Prompt used (task prompt)
 

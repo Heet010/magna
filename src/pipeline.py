@@ -6,6 +6,7 @@ from openai import OpenAI
 
 import config
 from src.agent import _cache_file, extract_company
+from src.compute import recompute_derived
 from src.pdf_extractor import filter_report
 from src.report_generator import render_excel, render_markdown, render_verification
 from src.schema import CompanyExtraction
@@ -15,7 +16,7 @@ def run(companies: list[str] | None = None, *, use_cache: bool = True) -> list[C
     """Extract KPIs for the given companies (default: all) and write the reports."""
     load_dotenv()
     companies = companies or list(config.COMPANIES)
-    client = OpenAI()  # reads OPENAI_API_KEY from env/.env
+    client = OpenAI()
 
     extractions: list[CompanyExtraction] = []
     for company in companies:
@@ -34,6 +35,7 @@ def run(companies: list[str] | None = None, *, use_cache: bool = True) -> list[C
               f"({q.char_count:,} chars)")
         print("  Calling agent…")
         result = extract_company(client, company, fy.text, q.text, use_cache=use_cache)
+        recompute_derived(result)
         extractions.append(result)
         print(f"  ✓ extracted ({result.summary_note[:80]}…)")
 
@@ -62,5 +64,6 @@ def load_cached(companies: list[str] | None = None) -> list[CompanyExtraction]:
             raise FileNotFoundError(
                 f"No cached result for {company} at {cache}. Run `python run.py` first."
             )
-        out.append(CompanyExtraction.model_validate_json(cache.read_text(encoding="utf-8")))
+        ex = CompanyExtraction.model_validate_json(cache.read_text(encoding="utf-8"))
+        out.append(recompute_derived(ex))
     return out

@@ -36,7 +36,13 @@ It returns a **structured output** (JSON schema enforced by the API — see
 `src/schema.py`): for each company, a `full_year` and a `last_quarter` block, each
 with all 10 metrics carrying `value`, `source_term` (the verbatim KPI name used by
 the company), `source_page` (the PDF page the figure was read from, for spot-checking),
-`status` (`reported` / `substituted` / `not_reported` / `not_available`), and a `note`.
+`status` (`reported` / `substituted` / `not_reported` / `not_available`), and a `note`,
+plus a `shares_outstanding` count per period.
+
+Two derived cells — **operating margin** (EBIT ÷ revenue) and **market cap @ €100/share**
+(€100 × shares outstanding) — are recomputed deterministically in Python from the
+extracted inputs (`src/compute.py`), so the table never depends on the model's
+arithmetic.
 
 ## 2. Prompt used (task prompt)
 
@@ -62,17 +68,30 @@ Extract these 10 metrics for EACH period (full year and last quarter):
                           Name the exact KPI.
 7. cost_of_capital      - Cost of capital / WACC / hurdle rate — ONLY where disclosed.
                           Otherwise "N/A" (not_available).
-8. eps                  - Earnings per share / "Ergebnis je Aktie".
-9. dividend_per_share   - Dividend per share (proposed/paid). May be "Not Reported"
-                          in a quarterly report.
+8. eps                  - Earnings per share / "Ergebnis je Aktie". Check the
+                          "Information on shares" / investor section, not just the
+                          highlights page.
+9. dividend_per_share   - Dividend per share (proposed or paid). Look for the
+                          dividend proposal / "Dividendenvorschlag" in the share/
+                          investor section of the full-year report. May be
+                          "Not Reported" in a quarterly report.
 10. market_cap_at_100eur- Market capitalisation IF the share price were EUR 100/share,
-                          i.e. 100 * (number of shares outstanding). Compute it only if
-                          the share count is in the text; otherwise "N/A".
+                          i.e. EUR 100 * (number of shares outstanding). Actively look
+                          for the share count: "number of shares" / "shares
+                          outstanding" / "no-par value shares" / issued capital /
+                          "Anzahl der Aktien" / "Stückaktien" (usually in the share or
+                          equity-notes section). If only EPS and net profit attributable
+                          to shareholders are given, you MAY derive shares = net profit /
+                          basic EPS. Show your computation in the note. Use "N/A" only
+                          if the share count is genuinely not derivable from the text.
 
-Notes on coverage (do NOT force a value that is not supported by the text):
-- One company does not disclose EPS & dividend per share -> use "N/A" there.
-- One company's "market cap @ EUR 100/share" is not derivable (share count absent)
-  -> use "N/A" there.
+Coverage guidance (the source data is consistent with these, but rely on the TEXT,
+not on these hints — do not force or suppress a value to match them):
+- Exactly ONE company does not disclose EPS & dividend per share in the provided
+  reports -> "N/A" for both of that company's EPS and dividend cells. The other two
+  companies DO disclose EPS and (in the full-year report) a dividend.
+- The "market cap @ EUR 100/share" is derivable for TWO of the three companies and
+  not available for ONE.
 ```
 
 A complete example task prompt (BMW; the report placeholders are replaced at runtime
@@ -98,25 +117,45 @@ Extract these 10 metrics for EACH period (full year and last quarter):
                           Name the exact KPI.
 7. cost_of_capital      - Cost of capital / WACC / hurdle rate — ONLY where disclosed.
                           Otherwise "N/A" (not_available).
-8. eps                  - Earnings per share / "Ergebnis je Aktie".
-9. dividend_per_share   - Dividend per share (proposed/paid). May be "Not Reported"
-                          in a quarterly report.
+8. eps                  - Earnings per share / "Ergebnis je Aktie". Check the
+                          "Information on shares" / investor section, not just the
+                          highlights page.
+9. dividend_per_share   - Dividend per share (proposed or paid). Look for the
+                          dividend proposal / "Dividendenvorschlag" in the share/
+                          investor section of the full-year report. May be
+                          "Not Reported" in a quarterly report.
 10. market_cap_at_100eur- Market capitalisation IF the share price were EUR 100/share,
-                          i.e. 100 * (number of shares outstanding). Compute it only if
-                          the share count is in the text; otherwise "N/A".
+                          i.e. EUR 100 * (number of shares outstanding). Actively look
+                          for the share count: "number of shares" / "shares
+                          outstanding" / "no-par value shares" / issued capital /
+                          "Anzahl der Aktien" / "Stückaktien" (usually in the share or
+                          equity-notes section). If only EPS and net profit attributable
+                          to shareholders are given, you MAY derive shares = net profit /
+                          basic EPS. Show your computation in the note. Use "N/A" only
+                          if the share count is genuinely not derivable from the text.
 
-Notes on coverage (do NOT force a value that is not supported by the text):
-- One company does not disclose EPS & dividend per share -> use "N/A" there.
-- One company's "market cap @ EUR 100/share" is not derivable (share count absent)
-  -> use "N/A" there.
+Coverage guidance (the source data is consistent with these, but rely on the TEXT,
+not on these hints — do not force or suppress a value to match them):
+- Exactly ONE company does not disclose EPS & dividend per share in the provided
+  reports -> "N/A" for both of that company's EPS and dividend cells. The other two
+  companies DO disclose EPS and (in the full-year report) a dividend.
+- The "market cap @ EUR 100/share" is derivable for TWO of the three companies and
+  not available for ONE.
 
 
 Return a CompanyExtraction object. For BOTH `full_year` and `last_quarter`, provide
-all 10 metrics (each with metric_key, value, source_term, source_page, status, note).
+all 10 metrics (each with metric_key, value, source_term, source_page, status, note)
+AND `shares_outstanding` (the total share count as a plain integer, summing all share
+classes — this is used to compute market cap in code, so get it from the report; use
+'' only if genuinely absent).
 For `source_page`, give the page number from the "===== PAGE N =====" marker that
 precedes the figure you used, so the value can be spot-checked against the PDF (use
-'' only when the value is computed or not available). In `summary_note`, briefly
-state which outputs used a substituted/equivalent KPI rather than an exact match.
+'' only when the value is computed or not available).
+Note: `operating_margin` and `market_cap_at_100eur` are recomputed in code from the
+revenue, EBIT and shares_outstanding you provide — so make those three inputs as
+accurate as possible; still fill the two derived cells with your best value.
+In `summary_note`, briefly state which outputs used a substituted/equivalent KPI
+rather than an exact match.
 
 ================ SOURCE: BMW Group — FULL-YEAR 2025 REPORT (filtered) ================
 <filtered text of the BMW full-year 2025 report — see src/pdf_extractor.py>

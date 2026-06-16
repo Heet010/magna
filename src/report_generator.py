@@ -1,9 +1,4 @@
-"""Render the executive summary: a Markdown report and an Excel workbook.
-
-The table has 6 data columns — full-year and last-quarter for each of the 3
-companies — with one row per requested metric, plus substitution/equivalent-KPI
-notes as the challenge requires.
-"""
+"""Render the executive summary as Markdown, Excel and a verification table."""
 from __future__ import annotations
 
 from datetime import date
@@ -45,9 +40,6 @@ def _periods(extractions: list[CompanyExtraction]):
     return cols
 
 
-# --------------------------------------------------------------------------
-# Markdown
-# --------------------------------------------------------------------------
 def render_markdown(extractions: list[CompanyExtraction]) -> str:
     cols = _periods(extractions)
     short = {
@@ -78,7 +70,6 @@ def render_markdown(extractions: list[CompanyExtraction]) -> str:
     lines += ["", f"† = company's equivalent/substituted KPI (not an exact term match). "
               "“Not Reported” = absent from the quarterly report; “N/A” = not disclosed.", ""]
 
-    # Per-company substitution / equivalent-KPI notes
     lines += ["## Substituted & equivalent KPIs", ""]
     for ex in extractions:
         lines.append(f"**{ex.company}** — {ex.summary_note.strip()}")
@@ -95,9 +86,6 @@ def render_markdown(extractions: list[CompanyExtraction]) -> str:
     return "\n".join(lines)
 
 
-# --------------------------------------------------------------------------
-# Verification view (spot-check each figure against the source page)
-# --------------------------------------------------------------------------
 def render_verification(extractions: list[CompanyExtraction]) -> str:
     """A flat audit table: every figure with the KPI term, status and source page."""
     lines = [
@@ -141,9 +129,6 @@ def print_verification(extractions: list[CompanyExtraction]) -> None:
                 print(f"   {flag} {m['label']:<38} {met.value:<22} [{page}]")
 
 
-# --------------------------------------------------------------------------
-# Excel
-# --------------------------------------------------------------------------
 _HEADER_FILL = PatternFill("solid", fgColor="1F2937")
 _GROUP_FILL = PatternFill("solid", fgColor="374151")
 _SUB_FILL = PatternFill("solid", fgColor="FEF3C7")     # substituted
