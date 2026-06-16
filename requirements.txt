@@ -1,0 +1,5 @@
+# AI agent for OEM financial-report executive summaries
+openai>=1.50.0         # official OpenAI SDK (structured outputs via .parse)
+pymupdf>=1.24.0        # PDF text extraction (imported as `fitz`)
+openpyxl>=3.1.0        # Excel workbook output
+python-dotenv>=1.0.0   # load OPENAI_API_KEY from .env
