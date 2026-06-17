@@ -56,6 +56,27 @@ Outputs land in `output/`:
 - `executive_summary.xlsx` — formatted workbook (substitutions highlighted) + notes sheet
 - `cache/*.json` — per-company structured extractions (delete or `--no-cache` to refresh)
 
+## Web app (upload PDFs → get the table)
+
+A Streamlit app lets you upload report PDFs, label each with a company and period,
+and get the summary table with Excel/Markdown downloads.
+
+```bash
+streamlit run app.py            # opens at http://localhost:8501
+```
+
+**Deploy free:**
+- **Streamlit Community Cloud** — push this repo to GitHub, "New app" → pick `app.py`,
+  and add `OPENAI_API_KEY` under *Advanced settings → Secrets*.
+- **Hugging Face Spaces** — create a Streamlit Space, add the repo, set
+  `OPENAI_API_KEY` as a Space secret. (More RAM on the free tier — prefer this for
+  large PDFs.)
+
+Safeguards built in: per-file size cap (`MAX_FILE_MB` in `app.py`, plus
+`maxUploadSize` in `.streamlit/config.toml`), uploads written to temp files and
+deleted after each run, sequential processing with a progress indicator, and errors
+surfaced in the UI instead of crashing.
+
 ## The requested metrics (table rows)
 
 Revenue · EBIT/Operating Result · Operating Margin · Cash Metric · Net Liquidity ·

@@ -137,7 +137,7 @@ _THIN = Side(style="thin", color="D1D5DB")
 _BORDER = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
 
 
-def render_excel(extractions: list[CompanyExtraction], path: Path) -> None:
+def build_workbook(extractions: list[CompanyExtraction]) -> Workbook:
     cols = _periods(extractions)
     wb = Workbook()
     ws = wb.active
@@ -205,6 +205,18 @@ def render_excel(extractions: list[CompanyExtraction], path: Path) -> None:
                     nr += 1
     notes.column_dimensions["A"].width = 48
     notes.column_dimensions["B"].width = 90
+    return wb
 
+
+def render_excel(extractions: list[CompanyExtraction], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    wb.save(path)
+    build_workbook(extractions).save(path)
+
+
+def excel_bytes(extractions: list[CompanyExtraction]) -> bytes:
+    """The Excel workbook as bytes (for a download button)."""
+    from io import BytesIO
+
+    buf = BytesIO()
+    build_workbook(extractions).save(buf)
+    return buf.getvalue()

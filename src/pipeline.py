@@ -43,6 +43,38 @@ def run(companies: list[str] | None = None, *, use_cache: bool = True) -> list[C
     return extractions
 
 
+def run_on_files(
+    file_map: dict[str, dict[str, str]],
+    *,
+    use_cache: bool = False,
+    progress=None,
+) -> list[CompanyExtraction]:
+    """Run the agent on uploaded files.
+
+    file_map: {company: {"FY2025": pdf_path, "Q1-2026": pdf_path}} (either period
+    may be missing). Used by the web app; does not depend on config's fixed mapping.
+    """
+    client = OpenAI()
+    extractions: list[CompanyExtraction] = []
+    for company, periods in file_map.items():
+        fy_path = periods.get("FY2025")
+        q_path = periods.get("Q1-2026")
+        fy_text = (
+            filter_report(fy_path, company, "FY2025", config.PER_REPORT_CHAR_BUDGET).text
+            if fy_path else "(no full-year report provided)"
+        )
+        q_text = (
+            filter_report(q_path, company, "Q1-2026", config.PER_REPORT_CHAR_BUDGET).text
+            if q_path else "(no quarterly report provided)"
+        )
+        result = extract_company(client, company, fy_text, q_text, use_cache=use_cache)
+        recompute_derived(result)
+        extractions.append(result)
+        if progress:
+            progress(company)
+    return extractions
+
+
 def write_reports(extractions: list[CompanyExtraction]) -> None:
     config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     md_path = config.OUTPUT_DIR / "executive_summary.md"
